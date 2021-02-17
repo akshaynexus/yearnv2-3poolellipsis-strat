@@ -40,15 +40,15 @@ def test_operation(
     vault.deposit(Wei("788000 ether"), {"from": alice})
     # Sleep and harvest 5 times
     sleepAndHarvest(5, strategy, gov)
-    # We should have made profit
-    assert vault.pricePerShare() / 1e18 > 1
+    # We should have made profit or stayed stagnant (This happens when there is no rewards in 1INCH rewards)
+    assert vault.pricePerShare() / 1e18 >= 1
     # Withdraws should not fail
     vault.withdraw(Wei("788000 ether"), {"from": alice})
     vault.withdraw(Wei("100000 ether"), {"from": bob})
 
-    # Depositors after withdraw should have a profit
-    assert currency.balanceOf(alice) > Wei("788000 ether")
-    assert currency.balanceOf(bob) > Wei("100000 ether")
+    # Depositors after withdraw should have a profit or gotten the original amount
+    assert currency.balanceOf(alice) >= Wei("788000 ether")
+    assert currency.balanceOf(bob) >= Wei("100000 ether")
 
     # Make sure it isnt less than 1 after depositors withdrew
     assert vault.pricePerShare() / 1e18 >= 1
