@@ -50,13 +50,13 @@ def rewards(gov):
 @pytest.fixture
 def currency(interface):
     # this one is curvesteth
-    yield interface.ERC20("0x111111111117dC0aa78b770fA6A738034120C302")
+    yield interface.ERC20("0xaF4dE8E872131AE328Ce21D909C74705d3Aaf452")
 
 
 @pytest.fixture
 def whale(accounts, web3, currency, chain):
     # Binance 7,Has alot of 1INCH
-    yield accounts.at("0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8", force=True)
+    yield accounts.at("0xcce949De564fE60e7f96C85e55177F8B9E4CF61b", force=True)
 
 
 @pytest.fixture

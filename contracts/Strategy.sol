@@ -11,44 +11,126 @@ import {SafeERC20, SafeMath, IERC20, Address} from "@openzeppelin/contracts/toke
 import "@openzeppelin/contracts/math/Math.sol";
 
 // Import interfaces for many popular DeFi projects, or add your own!
-import "../interfaces/I1INCHGovernance.sol";
-import "../interfaces/I1INCHGovernanceRewards.sol";
+import "../interfaces/ICurveFi.sol";
+import "../interfaces/ILiqRewards.sol";
+
+interface IRewardMinter {
+    //This gives us the 50% EPS rewards and BUSD
+    function exit() external;
+}
+
+interface IUniRouter {
+    function swapExactTokensForTokens(
+        uint256 amountOut,
+        uint256 amountInMax,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
+}
 
 contract Strategy is BaseStrategy {
     using SafeERC20 for IERC20;
     using Address for address;
     using SafeMath for uint256;
 
-    //Initiate 1inch interfaces
-    I1INCHGovernance public stakeT = I1INCHGovernance(0xA0446D8804611944F1B527eCD37d7dcbE442caba);
-    I1INCHGovernanceRewards public governanceT = I1INCHGovernanceRewards(0x0F85A912448279111694F4Ba4F85dC641c54b594);
+    uint256 public pid = 1;
+
+    address[] internal path;
+    address internal wbnb = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+
+    IERC20 internal iBUSD = IERC20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
+    IERC20 internal iEPS = IERC20(0xA7f552078dcC247C2684336020c03648500C6d9F);
+
+    IUniRouter public pancakeRouter = IUniRouter(0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F);
+    ICurveFi public Stable3EPS = ICurveFi(0x160CAed03795365F3A589f10C379FfA7d75d4E76);
+    ILiqRewards public farmer = ILiqRewards(0xcce949De564fE60e7f96C85e55177F8B9E4CF61b);
+    IRewardMinter public rewardMinter = IRewardMinter(0x4076CC26EFeE47825917D0feC3A79d0bB9a6bB5c);
 
     constructor(address _vault) public BaseStrategy(_vault) {
-        //Approve staking contract to spend 1inch tokens
-        want.safeApprove(address(stakeT), type(uint256).max);
+        want.safeApprove(address(farmer), type(uint256).max);
+        iBUSD.safeApprove(address(Stable3EPS), type(uint256).max);
+        iEPS.safeApprove(address(pancakeRouter), type(uint256).max);
+        path = getTokenOutPath(address(iEPS), address(iBUSD));
     }
 
     function name() external view override returns (string memory) {
-        return "Strategy1INCHGovernance";
+        return "StrategyEllipsis3Pool";
     }
 
-    // returns balance of 1INCH
+    // returns balance of 3EPS
     function balanceOfWant() public view returns (uint256) {
         return want.balanceOf(address(this));
     }
 
     //Returns staked value
     function balanceOfStake() public view returns (uint256) {
-        return stakeT.balanceOf(address(this));
+        return farmer.userInfo(pid, address(this)).amount;
     }
 
     function pendingReward() public view returns (uint256) {
-        return governanceT.earned(address(this));
+        return farmer.claimableReward(pid, address(this));
     }
 
     function estimatedTotalAssets() public view override returns (uint256) {
-        //Add the vault tokens + staked tokens from 1inch governance contract
-        return balanceOfWant().add(balanceOfStake()).add(pendingReward());
+        return balanceOfWant().add(balanceOfStake());
+    }
+
+    function getSwapPath() external view returns (address[] memory) {
+        return path;
+    }
+
+    function _deposit(uint256 amount) internal {
+        farmer.deposit(pid, amount);
+    }
+
+    function _withdraw(uint256 amount) internal {
+        farmer.withdraw(pid, amount);
+    }
+
+    function _getRewards() internal {
+        if (pendingReward() > 0) {
+            uint256[] memory pids = new uint256[](1);
+            pids[0] = pid;
+            //First call deposit with amount as 0 to mint rewards to minter
+            farmer.claim(pids);
+            //Now call exit and get EPS rewards
+            rewardMinter.exit();
+            //Next swap EPS for BUSD
+            _swapToBUSD();
+            //Add busd liq from all the remaining busd
+            _addBUSDLiq();
+        }
+    }
+
+    function getTokenOutPath(address _token_in, address _token_out) internal view returns (address[] memory _path) {
+        bool is_wbnb = _token_in == address(wbnb) || _token_out == address(wbnb);
+        _path = new address[](is_wbnb ? 2 : 3);
+        _path[0] = _token_in;
+        if (is_wbnb) {
+            _path[1] = _token_out;
+        } else {
+            _path[1] = address(wbnb);
+            _path[2] = _token_out;
+        }
+    }
+
+    //sell all function
+    function _swapToBUSD() internal {
+        uint256 rewardBal = iEPS.balanceOf(address(this));
+        if (rewardBal == 0) {
+            return;
+        }
+        if (path.length == 0) {
+            pancakeRouter.swapExactTokensForTokens(rewardBal, uint256(0), getTokenOutPath(address(iEPS), address(iBUSD)), address(this), now);
+        } else {
+            pancakeRouter.swapExactTokensForTokens(rewardBal, uint256(0), path, address(this), now);
+        }
+    }
+
+    function _addBUSDLiq() internal {
+        uint256[3] memory amounts = [iBUSD.balanceOf(address(this)), 0, 0];
+        Stable3EPS.add_liquidity(amounts, 0);
     }
 
     function prepareReturn(uint256 _debtOutstanding)
@@ -68,7 +150,7 @@ contract Strategy is BaseStrategy {
         }
 
         uint256 balanceOfWantBefore = balanceOfWant();
-        governanceT.getReward();
+        if (!emergencyExit) _getRewards();
 
         _profit = balanceOfWant().sub(balanceOfWantBefore);
     }
@@ -83,7 +165,7 @@ contract Strategy is BaseStrategy {
         uint256 toInvest = _wantAvailable.sub(_debtOutstanding);
 
         if (toInvest > 0) {
-            stakeT.stake(toInvest);
+            _deposit(toInvest);
         }
     }
 
@@ -94,7 +176,7 @@ contract Strategy is BaseStrategy {
         uint256 balanceStaked = balanceOfStake();
         if (_amountNeeded > balanceWant) {
             // unstake needed amount
-            stakeT.unstake((Math.min(balanceStaked, _amountNeeded - balanceWant)));
+            _withdraw((Math.min(balanceStaked, _amountNeeded - balanceWant)));
         }
         // Since we might free more than needed, let's send back the min
         _liquidatedAmount = Math.min(balanceOfWant(), _amountNeeded);
@@ -102,15 +184,16 @@ contract Strategy is BaseStrategy {
 
     function prepareMigration(address _newStrategy) internal override {
         // If we have pending rewards,take that out
-        governanceT.getReward();
-        stakeT.unstake(balanceOfStake());
+        if (emergencyExit) {
+            //Do emergency withdraw flow
+            farmer.emergencyWithdraw(pid);
+        } else {
+            _getRewards();
+            _withdraw(balanceOfStake());
+        }
     }
 
     // Override this to add all tokens/tokenized positions this contract manages
     // on a *persistent* basis (e.g. not just for swapping back to want ephemerally)
-    function protectedTokens() internal view override returns (address[] memory) {
-        address[] memory protected = new address[](1);
-        protected[0] = address(stakeT); // Staked 1inch tokens from governance contract
-        return protected;
-    }
+    function protectedTokens() internal view override returns (address[] memory) {}
 }

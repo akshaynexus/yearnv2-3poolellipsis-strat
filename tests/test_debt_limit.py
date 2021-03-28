@@ -16,7 +16,7 @@ def test_increasing_debt_limit(gov, whale, currency, vault, strategy):
 
     # Start with a 40k deposit limit
     vault.setDepositLimit(deposit_amount, {"from": gov})
-    vault.addStrategy(strategy, 10_000, 0, 0, {"from": gov})
+    vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 0, {"from": gov})
 
     # deposit 40k in total to test
     vault.deposit(deposit_amount, {"from": gov})
@@ -30,7 +30,9 @@ def test_increasing_debt_limit(gov, whale, currency, vault, strategy):
     vault.setDepositLimit(second_deposit_amount, {"from": gov})
     vault.deposit(deposit_amount, {"from": gov})
     strategy.harvest()
-    assert strategy.estimatedTotalAssets() >= final_amount #Check that assets is >= 80k
+    assert (
+        strategy.estimatedTotalAssets() >= final_amount
+    )  # Check that assets is >= 80k
 
 
 def test_decrease_debt_limit(gov, whale, currency, vault, strategy):
@@ -43,7 +45,7 @@ def test_decrease_debt_limit(gov, whale, currency, vault, strategy):
 
     vault.setDepositLimit(second_deposit_amount, {"from": gov})
     # Start with 100% of the debt
-    vault.addStrategy(strategy, 10_000, 0, 0, {"from": gov})
+    vault.addStrategy(strategy, 10_000, 0, 2 ** 256 - 1, 0, {"from": gov})
     print(vault.availableDepositLimit())
     # Depositing 80k
     vault.deposit(second_deposit_amount, {"from": gov})
