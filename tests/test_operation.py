@@ -70,6 +70,6 @@ def sleepAndHarvest(times, strat, gov):
 def debugStratData(strategy, msg):
     print(msg)
     print("Total assets " + str(strategy.estimatedTotalAssets()))
-    print("1INCH Balance " + str(strategy.balanceOfWant()))
+    print("3EPS Balance " + str(strategy.balanceOfWant()))
     print("Stake balance " + str(strategy.balanceOfStake()))
     print("Pending reward " + str(strategy.pendingReward()))

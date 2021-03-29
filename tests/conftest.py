@@ -55,7 +55,6 @@ def currency(interface):
 
 @pytest.fixture
 def whale(accounts, web3, currency, chain):
-    # Binance 7,Has alot of 1INCH
     yield accounts.at("0xcce949De564fE60e7f96C85e55177F8B9E4CF61b", force=True)
 
 
