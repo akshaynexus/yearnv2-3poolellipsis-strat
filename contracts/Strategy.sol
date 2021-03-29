@@ -1,16 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0
-// Feel free to change the license, but this is what we use
-
-// Feel free to change this version of Solidity. We support >=0.6.0 <0.7.0;
 pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
-// These are the core Yearn libraries
 import {BaseStrategy} from "@yearnvaults/contracts/BaseStrategy.sol";
 import {SafeERC20, SafeMath, IERC20, Address} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import "@openzeppelin/contracts/math/Math.sol";
 
-// Import interfaces for many popular DeFi projects, or add your own!
 import "../interfaces/ICurveFi.sol";
 import "../interfaces/ILiqRewards.sol";
 
@@ -36,8 +31,8 @@ contract Strategy is BaseStrategy {
 
     uint256 public pid = 1;
 
-    address[] internal path;
-    address internal wbnb = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+    address[] public path;
+    address internal wbnb = address(0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c);
 
     IERC20 internal iBUSD = IERC20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
     IERC20 internal iEPS = IERC20(0xA7f552078dcC247C2684336020c03648500C6d9F);
@@ -74,10 +69,6 @@ contract Strategy is BaseStrategy {
 
     function estimatedTotalAssets() public view override returns (uint256) {
         return balanceOfWant().add(balanceOfStake());
-    }
-
-    function getSwapPath() external view returns (address[] memory) {
-        return path;
     }
 
     function _deposit(uint256 amount) internal {
@@ -121,6 +112,7 @@ contract Strategy is BaseStrategy {
         if (rewardBal == 0) {
             return;
         }
+
         if (path.length == 0) {
             pancakeRouter.swapExactTokensForTokens(rewardBal, uint256(0), getTokenOutPath(address(iEPS), address(iBUSD)), address(this), now);
         } else {
@@ -150,7 +142,9 @@ contract Strategy is BaseStrategy {
         }
 
         uint256 balanceOfWantBefore = balanceOfWant();
-        if (!emergencyExit) _getRewards();
+        if (!emergencyExit) {
+            _getRewards();
+        }
 
         _profit = balanceOfWant().sub(balanceOfWantBefore);
     }
