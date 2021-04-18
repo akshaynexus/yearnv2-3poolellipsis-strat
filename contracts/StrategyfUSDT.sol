@@ -23,6 +23,7 @@ contract StrategyfUSDT is Strategy {
         pid = 2;
         secondaryReward.safeApprove(address(pancakeRouter), type(uint256).max);
         iFUSDT.safeApprove(address(fUSDTLPMinter), type(uint256).max);
+        Stable3EPSToken.safeApprove(address(fUSDTLPMinter), type(uint256).max);
     }
 
     function name() external view override returns (string memory) {
