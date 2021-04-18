@@ -5,6 +5,13 @@ from brownie import Wei, accounts, chain
 # https://github.com/Macarse/yhegic
 # https://github.com/Grandthrax/yearnv2_steth_crv_strat
 
+# Amount configs, shared between tests
+test_budget = Wei("888000 ether")
+approve_amount = Wei("1000000 ether")
+deposit_limit = Wei("889000 ether")
+bob_deposit = Wei("100000 ether")
+alice_deposit = Wei("788000 ether")
+
 
 def test_operation(
     currency,
@@ -19,12 +26,6 @@ def test_operation(
     guardian,
     interface,
 ):
-    # Amount configs
-    test_budget = Wei("888000 ether")
-    approve_amount = Wei("1000000 ether")
-    deposit_limit = Wei("889000 ether")
-    bob_deposit = Wei("100000 ether")
-    alice_deposit = Wei("788000 ether")
     currency.approve(whale, approve_amount, {"from": whale})
     currency.transferFrom(whale, gov, test_budget, {"from": whale})
 
@@ -55,6 +56,50 @@ def test_operation(
 
     # Make sure it isnt less than 1 after depositors withdrew
     assert vault.pricePerShare() / 1e18 >= 1
+
+
+def test_operation_internal(
+    currencyfUSDTLP,
+    strategyFUSDTLP,
+    chain,
+    vaultFUSDTLP,
+    whalefusdtlp,
+    gov,
+    bob,
+    alice,
+    strategist,
+    guardian,
+    interface,
+):
+    currencyfUSDTLP.approve(whalefusdtlp, approve_amount, {"from": whalefusdtlp})
+    currencyfUSDTLP.transfer(gov, test_budget, {"from": whalefusdtlp})
+
+    vaultFUSDTLP.setDepositLimit(deposit_limit)
+
+    # 100% of the vault's depositLimit
+    vaultFUSDTLP.addStrategy(strategyFUSDTLP, 10_000, 0, 2 ** 256 - 1, 0, {"from": gov})
+
+    currencyfUSDTLP.transfer(bob, bob_deposit, {"from": gov})
+    currencyfUSDTLP.transfer(alice, alice_deposit, {"from": gov})
+    currencyfUSDTLP.approve(vaultFUSDTLP, approve_amount, {"from": bob})
+    currencyfUSDTLP.approve(vaultFUSDTLP, approve_amount, {"from": alice})
+
+    vaultFUSDTLP.deposit(bob_deposit, {"from": bob})
+    vaultFUSDTLP.deposit(alice_deposit, {"from": alice})
+    # Sleep and harvest 5 times
+    sleepAndHarvest(5, strategyFUSDTLP, gov)
+    # We should have made profit or stayed stagnant (This happens when there is no rewards in 1INCH rewards)
+    assert vaultFUSDTLP.pricePerShare() / 1e18 >= 1
+    # Withdraws should not fail
+    vaultFUSDTLP.withdraw(alice_deposit, {"from": alice})
+    vaultFUSDTLP.withdraw(bob_deposit, {"from": bob})
+
+    # Depositors after withdraw should have a profit or gotten the original amount
+    assert currencyfUSDTLP.balanceOf(alice) >= alice_deposit
+    assert currencyfUSDTLP.balanceOf(bob) >= bob_deposit
+
+    # Make sure it isnt less than 1 after depositors withdrew
+    assert vaultFUSDTLP.pricePerShare() / 1e18 >= 1
 
 
 def sleepAndHarvest(times, strat, gov):

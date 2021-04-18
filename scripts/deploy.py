@@ -60,13 +60,7 @@ def main():
         vaultRegistry = IVaultRegistry(VAULT_REGISTRY)
         # Deploy and get Vault deployment address
         expVaultTx = vaultRegistry.newExperimentalVault(
-            WANT_TOKEN,
-            devaddr,
-            STRATEGIST_MULTISIG,
-            TREASURY,
-            "",
-            "",
-            {"from": dev},
+            WANT_TOKEN, devaddr, STRATEGIST_MULTISIG, TREASURY, "", "", {"from": dev},
         )
         vault = Vault.at(expVaultTx.return_value)
     else:

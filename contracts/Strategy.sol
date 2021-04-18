@@ -40,6 +40,9 @@ contract Strategy is BaseStrategy {
     address internal wbnb = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
 
     IERC20 internal iBUSD = IERC20(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
+    IERC20 internal iUSDC = IERC20(0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d);
+    IERC20 internal iUSDT = IERC20(0x55d398326f99059fF775485246999027B3197955);
+
     IERC20 internal iEPS = IERC20(0xA7f552078dcC247C2684336020c03648500C6d9F);
 
     IUniRouter public pancakeRouter = IUniRouter(0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F);
@@ -50,11 +53,13 @@ contract Strategy is BaseStrategy {
     constructor(address _vault) public BaseStrategy(_vault) {
         want.safeApprove(address(farmer), type(uint256).max);
         iBUSD.safeApprove(address(Stable3EPS), type(uint256).max);
+        iUSDC.safeApprove(address(Stable3EPS), type(uint256).max);
+        iUSDT.safeApprove(address(Stable3EPS), type(uint256).max);
         iEPS.safeApprove(address(pancakeRouter), type(uint256).max);
         path = getTokenOutPath(address(iEPS), address(iBUSD));
     }
 
-    function name() external view override returns (string memory) {
+    function name() external view virtual override returns (string memory) {
         return "StrategyEllipsis3Pool";
     }
 
@@ -88,18 +93,18 @@ contract Strategy is BaseStrategy {
         farmer.withdraw(pid, amount);
     }
 
-    function _getRewards() internal {
+    function _getRewards() internal virtual {
         if (pendingReward() > 0) {
             uint256[] memory pids = new uint256[](1);
             pids[0] = pid;
-            //First call deposit with amount as 0 to mint rewards to minter
+            //First call claim EPS Rewards to minter
             farmer.claim(pids);
             //Now call exit and get EPS rewards
             rewardMinter.exit();
             //Next swap EPS for BUSD
-            _swapToBUSD();
+            _swapToBest();
             //Add busd liq from all the remaining busd
-            _addBUSDLiq();
+            _addStablesLiq();
         }
     }
 
@@ -116,21 +121,29 @@ contract Strategy is BaseStrategy {
     }
 
     //sell all function
-    function _swapToBUSD() internal {
+    function _swapToBest() internal {
         uint256 rewardBal = iEPS.balanceOf(address(this));
         if (rewardBal == 0) {
             return;
         }
-        if (path.length == 0) {
-            pancakeRouter.swapExactTokensForTokens(rewardBal, uint256(0), getTokenOutPath(address(iEPS), address(iBUSD)), address(this), now);
-        } else {
-            pancakeRouter.swapExactTokensForTokens(rewardBal, uint256(0), path, address(this), now);
-        }
+        //Always get the best swap out
+        pancakeRouter.swapExactTokensForTokens(rewardBal, uint256(0), getTokenOutPath(address(iEPS), getBestStableToAdd()), address(this), now);
     }
 
-    function _addBUSDLiq() internal {
-        uint256[3] memory amounts = [iBUSD.balanceOf(address(this)), 0, 0];
+    function _addStablesLiq() internal virtual {
+        uint256[3] memory amounts = [iBUSD.balanceOf(address(this)), iUSDC.balanceOf(address(this)), iUSDT.balanceOf(address(this))];
         Stable3EPS.add_liquidity(amounts, 0);
+    }
+
+    function getBestStableToAdd() public view returns (address) {
+        //Get all balances of 3eps contract
+        uint256 busdBal = iBUSD.balanceOf(address(Stable3EPS));
+        uint256 usdcBal = iUSDC.balanceOf(address(Stable3EPS));
+        uint256 usdtBal = iUSDT.balanceOf(address(Stable3EPS));
+        //return which one has the least in lp pool
+        if (usdtBal < usdcBal && usdtBal < busdBal) return address(iUSDT);
+        else if (usdcBal < usdtBal && usdcBal < busdBal) return address(iUSDC);
+        else return address(iBUSD);
     }
 
     function prepareReturn(uint256 _debtOutstanding)
