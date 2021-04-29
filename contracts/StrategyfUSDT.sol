@@ -17,11 +17,12 @@ contract StrategyfUSDT is Strategy {
     IERC20RewardToken fUSDTLP = IERC20RewardToken(0x373410A99B64B089DFE16F1088526D399252dacE);
 
     ICurveFi public fUSDTLPMinter = ICurveFi(0x556ea0b4c06D043806859c9490072FaadC104b63);
+    IUniRouter internal sushiRouter = IUniRouter(0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506);
 
     constructor(address _vault) public Strategy(_vault) {
         //3pool fusdt lp staker pid
         pid = 2;
-        secondaryReward.safeApprove(address(pancakeRouter), type(uint256).max);
+        secondaryReward.safeApprove(address(sushiRouter), type(uint256).max);
         iFUSDT.safeApprove(address(fUSDTLPMinter), type(uint256).max);
         Stable3EPSToken.safeApprove(address(fUSDTLPMinter), type(uint256).max);
     }
@@ -34,7 +35,13 @@ contract StrategyfUSDT is Strategy {
         return fUSDTLP.earned(address(this), address(secondaryReward));
     }
 
-    function _getRewards() internal virtual override {
+    function updateSushiRouter(address _newRouter) external onlyGovernance {
+        iEPS.safeApprove(address(sushiRouter), 0);
+        sushiRouter = IUniRouter(_newRouter);
+        iEPS.safeApprove(_newRouter, type(uint256).max);
+    }
+
+    function _getRewards(bytes memory swapData) internal virtual override {
         if (pendingReward() > 0) {
             uint256[] memory pids = new uint256[](1);
             pids[0] = pid;
@@ -43,12 +50,12 @@ contract StrategyfUSDT is Strategy {
             //Now call exit and get EPS rewards
             rewardMinter.exit();
             //Next swap EPS for best stable to add via single side add
-            _swapToBest();
+            _swapToBest(swapData);
             if (pendingSecondaryReward() > 0) {
                 //Get ICE Reward
                 fUSDTLP.getReward();
-                //Swap fusdt for best stable
-                pancakeRouter.swapExactTokensForTokens(
+                //Swap ICE for best stable
+                sushiRouter.swapExactTokensForTokens(
                     secondaryReward.balanceOf(address(this)),
                     uint256(0),
                     getTokenOutPath(address(secondaryReward), getBestStableToAdd()),

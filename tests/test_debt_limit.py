@@ -1,12 +1,14 @@
 import pytest
 import brownie
 from brownie import Wei
+import conftest as config
 
 deposit_amount = Wei("40000 ether")
 second_deposit_amount = Wei("160000 ether")
 final_amount = Wei("80000 ether")
 
 
+@pytest.mark.parametrize(config.fixtures, config.params, indirect=True)
 def test_increasing_debt_limit(gov, whale, currency, vault, strategy):
     currency.approve(vault, 2 ** 256 - 1, {"from": gov})
     # Fund gov with enough tokens
@@ -36,6 +38,7 @@ def test_increasing_debt_limit(gov, whale, currency, vault, strategy):
     )  # Check that assets is >= 80k
 
 
+@pytest.mark.parametrize(config.fixtures, config.params, indirect=True)
 def test_decrease_debt_limit(gov, whale, currency, vault, strategy):
     currency.approve(vault, 2 ** 256 - 1, {"from": gov})
     # Fund gov with enough tokens

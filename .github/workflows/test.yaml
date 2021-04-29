@@ -64,10 +64,8 @@ jobs:
 
     - name: Compile Code
       run: brownie compile --size
-    - name: Add Binance Smart Chain fork network
-      run: brownie networks add development binance-fork cmd=ganache-cli host=http://127.0.0.1 fork=https://bsc-dataseed1.binance.org accounts=10 mnemonic=brownie port=8545
     - name: Run Tests
       env:
-        ETHERSCAN_TOKEN: MW5CQA6QK5YMJXP2WP3RA36HM5A7RA1IHA
+        BSCSCAN_TOKEN: 1JQDP736KRRG9QU9VTF7RTEV6SXXNNHTNN
         WEB3_INFURA_PROJECT_ID: b7821200399e4be2b4e5dbdf06fbe85b
       run: brownie test
